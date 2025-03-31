@@ -2,7 +2,7 @@
 
 import { useState, FormEvent } from "react";
 import Image from "next/image";
-import { subscribeUser } from "./actions";
+import { subscribeUser } from "../lib/actions";
 
 interface FormStatusType {
   type: 'success' | 'error' | '';
