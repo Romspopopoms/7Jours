@@ -1,6 +1,65 @@
-import Image from "next/image";
+'use client';
 
-export default function LandingPage7Jours() {
+import { useState, FormEvent } from "react";
+import Image from "next/image";
+import { subscribeUser } from "./actions";
+
+interface FormStatusType {
+  type: 'success' | 'error' | '';
+  message: string;
+}
+
+export default function LandingPage7Jours(): React.ReactNode {
+  const [firstName, setFirstName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [formStatus, setFormStatus] = useState<FormStatusType>({ type: '', message: '' });
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+    
+    // Réinitialiser le statut du formulaire
+    setFormStatus({ type: '', message: '' });
+    
+    // Validation simple
+    if (!firstName.trim() || !email.trim()) {
+      setFormStatus({ 
+        type: 'error', 
+        message: 'Merci de remplir tous les champs.'
+      });
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      
+      const result = await subscribeUser(firstName, email);
+      
+      if (result.success) {
+        setFormStatus({ 
+          type: 'success', 
+          message: 'Inscription réussie ! Vérifiez votre email pour recevoir votre PDF.'
+        });
+        // Réinitialiser le formulaire
+        setFirstName('');
+        setEmail('');
+      } else {
+        setFormStatus({ 
+          type: 'error', 
+          message: result.message || 'Une erreur est survenue. Veuillez réessayer.'
+        });
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'inscription:', error);
+      setFormStatus({ 
+        type: 'error', 
+        message: 'Une erreur est survenue. Veuillez réessayer.'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="relative min-h-screen bg-blue-950 text-white flex flex-col items-center justify-center px-4 py-12 overflow-hidden">
       {/* Image de fond floutée */}
@@ -29,22 +88,48 @@ export default function LandingPage7Jours() {
         </div>
 
         {/* Formulaire */}
-        <form className="bg-white/20 backdrop-blur-md text-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-auto space-y-4 border border-white/30">
+        <form 
+          onSubmit={handleSubmit}
+          className="bg-white/20 backdrop-blur-md text-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-auto space-y-4 border border-white/30"
+        >
+          {formStatus.message && (
+            <div 
+              className={`p-3 rounded-lg text-sm ${
+                formStatus.type === 'success' 
+                  ? 'bg-green-500/20 text-green-100' 
+                  : 'bg-red-500/20 text-red-100'
+              }`}
+            >
+              {formStatus.message}
+            </div>
+          )}
+          
           <input
             type="text"
             placeholder="Ton prénom"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
             className="w-full px-4 py-2 rounded-xl bg-white/20 text-white placeholder-gray-300 border border-white/40 focus:outline-none"
+            required
           />
           <input
             type="email"
             placeholder="Ton email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="w-full px-4 py-2 rounded-xl bg-white/20 text-white placeholder-gray-300 border border-white/40 focus:outline-none"
+            required
           />
           <button
             type="submit"
-            className="w-full bg-blue-600/60 hover:bg-blue-600/30 text-white py-2 rounded-xl font-semibold transition"
+            disabled={isSubmitting}
+            className={`w-full ${
+              isSubmitting 
+                ? 'bg-blue-800/60 cursor-not-allowed' 
+                : 'bg-blue-600/60 hover:bg-blue-600/30'
+            } text-white py-2 rounded-xl font-semibold transition`}
           >
-            Je m&apos;inscris gratuitement
+            {isSubmitting ? 'Inscription en cours...' : 'Je m\'inscris gratuitement'}
           </button>
         </form>
 
@@ -60,11 +145,17 @@ export default function LandingPage7Jours() {
         <div>
           <h3 className="text-xl md:text-2xl font-medium mb-2">Laisse Dieu toucher ton cœur</h3>
           <p className="text-gray-300 mb-4">Inscris-toi dès maintenant et commence ce voyage intérieur</p>
-          <button className="bg-blue-600/60 hover:bg-blue-600/30 text-white px-6 py-3 rounded-2xl font-semibold transition">
+          <button 
+            onClick={() => {
+              const formElement = document.querySelector('form');
+              if (formElement) formElement.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="bg-blue-600/60 hover:bg-blue-600/30 text-white px-6 py-3 rounded-2xl font-semibold transition"
+          >
             Je commence les 7 jours
           </button>
         </div>
+        </div>
       </div>
-    </div>
   );
 }
