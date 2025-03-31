@@ -44,7 +44,7 @@ export default function LandingPage7Jours() {
             type="submit"
             className="w-full bg-blue-600/60 hover:bg-blue-600/30 text-white py-2 rounded-xl font-semibold transition"
           >
-            Je m'inscris gratuitement
+            Je m&apos;inscris gratuitement
           </button>
         </form>
 
