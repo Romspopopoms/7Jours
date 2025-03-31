@@ -1,3 +1,4 @@
+// Dans lib/actions.ts
 'use server';
 
 import { neon } from '@neondatabase/serverless';
@@ -27,8 +28,21 @@ export async function subscribeUser(firstName: string, email: string): Promise<S
   }
   
   try {
+    // Essayer différentes variables d'environnement pour la connexion
+    const connectionString = process.env.DATABASE_URL || 
+                            process.env.POSTGRES_URL || 
+                            process.env.POSTGRES_PRISMA_URL;
+    
+    if (!connectionString) {
+      console.error('Aucune chaîne de connexion à la base de données n\'a été trouvée');
+      return {
+        success: false,
+        message: 'Erreur de configuration de la base de données'
+      };
+    }
+    
     // Connexion à la base de données
-    const sql = neon(process.env.DATABASE_URL || '');
+    const sql = neon(connectionString);
     
     // Vérifier si l'email existe déjà
     const existingUsers = await sql`
