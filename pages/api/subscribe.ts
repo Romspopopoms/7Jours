@@ -1,6 +1,6 @@
 // pages/api/subscribe.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { sql } from '@vercel/postgres';
+import { addSubscriber } from '../../lib/db'; // Assurez-vous que le chemin est correct
 
 type ResponseData = {
   success: boolean;
@@ -37,30 +37,14 @@ export default async function handler(
       });
     }
     
-    // Vérifier si l'email existe déjà
-    const existingUsers = await sql`
-      SELECT * FROM subscribers WHERE email = ${email}
-    `;
+    // Utilisez la fonction addSubscriber de db.js
+    const result = await addSubscriber(firstName, email);
     
-    if (existingUsers.rows.length > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cet email est déjà inscrit.'
-      });
+    if (result.success) {
+      return res.status(200).json(result);
+    } else {
+      return res.status(400).json(result);
     }
-    
-    // Ajouter l'abonné
-    const result = await sql`
-      INSERT INTO subscribers (first_name, email)
-      VALUES (${firstName}, ${email})
-      RETURNING id
-    `;
-    
-    return res.status(200).json({ 
-      success: true, 
-      message: 'Inscription réussie ! Vérifiez votre email pour recevoir votre PDF.',
-      id: result.rows[0].id
-    });
   } catch (error) {
     console.error('Erreur lors de l\'ajout d\'un abonné:', error);
     return res.status(500).json({ 
