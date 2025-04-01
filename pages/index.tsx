@@ -2,7 +2,6 @@
 
 import { useState, FormEvent } from "react";
 import Image from "next/image";
-import { subscribeUser } from "../lib/actions";
 
 interface FormStatusType {
   type: 'success' | 'error' | '';
@@ -15,50 +14,59 @@ export default function LandingPage7Jours(): React.ReactNode {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formStatus, setFormStatus] = useState<FormStatusType>({ type: '', message: '' });
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
-    
-    // Réinitialiser le statut du formulaire
-    setFormStatus({ type: '', message: '' });
-    
-    // Validation simple
-    if (!firstName.trim() || !email.trim()) {
-      setFormStatus({ 
-        type: 'error', 
-        message: 'Merci de remplir tous les champs.'
-      });
-      return;
-    }
+  // Dans votre composant LandingPage7Jours
+const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+  e.preventDefault();
+  
+  // Réinitialiser le statut du formulaire
+  setFormStatus({ type: '', message: '' });
+  
+  // Validation simple
+  if (!firstName.trim() || !email.trim()) {
+    setFormStatus({ 
+      type: 'error', 
+      message: 'Merci de remplir tous les champs.'
+    });
+    return;
+  }
 
-    try {
-      setIsSubmitting(true);
-      
-      const result = await subscribeUser(firstName, email);
-      
-      if (result.success) {
-        setFormStatus({ 
-          type: 'success', 
-          message: 'Inscription réussie ! Vérifiez votre email pour recevoir votre PDF.'
-        });
-        // Réinitialiser le formulaire
-        setFirstName('');
-        setEmail('');
-      } else {
-        setFormStatus({ 
-          type: 'error', 
-          message: result.message || 'Une erreur est survenue. Veuillez réessayer.'
-        });
-      }
-    } catch (error) {
-      console.error('Erreur lors de l\'inscription:', error);
+  try {
+    setIsSubmitting(true);
+    
+    const response = await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ firstName, email })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      setFormStatus({ 
+        type: 'success', 
+        message: result.message || 'Inscription réussie ! Vérifiez votre email pour recevoir votre PDF.'
+      });
+      // Réinitialiser le formulaire
+      setFirstName('');
+      setEmail('');
+    } else {
       setFormStatus({ 
         type: 'error', 
-        message: 'Une erreur est survenue. Veuillez réessayer.'
+        message: result.message || 'Une erreur est survenue. Veuillez réessayer.'
       });
-    } finally {
-      setIsSubmitting(false);
     }
-  };
+  } catch (error) {
+    console.error('Erreur lors de l\'inscription:', error);
+    setFormStatus({ 
+      type: 'error', 
+      message: 'Une erreur est survenue. Veuillez réessayer.'
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   return (
     <div className="relative min-h-screen bg-blue-950 text-white flex flex-col items-center justify-center px-4 py-12 overflow-hidden">
