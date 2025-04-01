@@ -1,23 +1,53 @@
 'use client';
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import Image from "next/image";
+import React from "react";
 
 interface FormStatusType {
   type: 'success' | 'error' | '';
   message: string;
 }
 
-export default function LandingPage7Jours(): React.ReactNode {
+export default function LandingPage7Jours() {
   const [firstName, setFirstName] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formStatus, setFormStatus] = useState<FormStatusType>({ type: '', message: '' });
+  const [dbReady, setDbReady] = useState<boolean>(false);
+
+  // S'assurer que la table existe au chargement de la page
+  useEffect(() => {
+    const initDatabase = async () => {
+      try {
+        const response = await fetch('/api/migrate');
+        const data = await response.json();
+        
+        if (data.success) {
+          console.log('Base de données prête');
+          setDbReady(true);
+        } else {
+          console.error('Erreur d\'initialisation de la base de données:', data.message);
+        }
+      } catch (error) {
+        console.error('Erreur lors de l\'initialisation de la base de données:', error);
+      }
+    };
+
+    initDatabase();
+  }, []);
 
   // Dans votre composant LandingPage7Jours
 const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
   e.preventDefault();
   
+  if (!dbReady) {
+    setFormStatus({
+      type: 'error',
+      message: 'Le système n\'est pas encore prêt, veuillez réessayer dans quelques instants.'
+    });
+    return;
+  }
   // Réinitialiser le statut du formulaire
   setFormStatus({ type: '', message: '' });
   
