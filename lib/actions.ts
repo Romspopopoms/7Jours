@@ -1,7 +1,6 @@
-// Dans lib/actions.ts
 'use server';
 
-import { neon } from '@neondatabase/serverless';
+import { sql } from '@vercel/postgres';
 
 interface SubscribeResult {
   success: boolean;
@@ -28,28 +27,12 @@ export async function subscribeUser(firstName: string, email: string): Promise<S
   }
   
   try {
-    // Essayer différentes variables d'environnement pour la connexion
-    const connectionString = process.env.DATABASE_URL || 
-                            process.env.POSTGRES_URL || 
-                            process.env.POSTGRES_PRISMA_URL;
-    
-    if (!connectionString) {
-      console.error('Aucune chaîne de connexion à la base de données n\'a été trouvée');
-      return {
-        success: false,
-        message: 'Erreur de configuration de la base de données'
-      };
-    }
-    
-    // Connexion à la base de données
-    const sql = neon(connectionString);
-    
     // Vérifier si l'email existe déjà
     const existingUsers = await sql`
       SELECT * FROM subscribers WHERE email = ${email}
     `;
     
-    if (existingUsers.length > 0) {
+    if (existingUsers.rows.length > 0) {
       return { 
         success: false, 
         message: 'Cet email est déjà inscrit.'
@@ -66,7 +49,7 @@ export async function subscribeUser(firstName: string, email: string): Promise<S
     return { 
       success: true, 
       message: 'Inscription réussie ! Vérifiez votre email pour recevoir votre PDF.',
-      id: result[0].id
+      id: result.rows[0].id
     };
   } catch (error) {
     console.error('Erreur lors de l\'ajout d\'un abonné:', error);
