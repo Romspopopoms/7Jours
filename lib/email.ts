@@ -4,22 +4,35 @@ import path from 'path';
 
 // Configuration sécurisée du transporteur d'email
 const createEmailTransporter = () => {
-  // Vérification des variables d'environnement
-  const requiredVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASSWORD'];
-  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+  // Log détaillé des variables d'environnement
+  console.log('Variables d\'environnement EMAIL:', {
+    HOST: process.env.EMAIL_HOST,
+    PORT: process.env.EMAIL_PORT,
+    USER: process.env.EMAIL_USER ? '✓' : 'MANQUANT',
+    SECURE: process.env.EMAIL_SECURE
+  });
 
-  if (missingVars.length > 0) {
-    throw new Error(`Variables d'environnement manquantes : ${missingVars.join(', ')}`);
+  // Vérification et valeurs par défaut
+  const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
+  const port = Number(process.env.EMAIL_PORT || '587');
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASSWORD;
+  const secure = process.env.EMAIL_SECURE === 'true';
+
+  // Validation des variables critiques
+  if (!host || !user || !pass) {
+    throw new Error(`Variables d'environnement EMAIL manquantes: ${
+      [!host ? 'HOST' : '', !user ? 'USER' : '', !pass ? 'PASSWORD' : '']
+        .filter(Boolean)
+        .join(', ')
+    }`);
   }
 
   return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT || '587'),
-    secure: process.env.EMAIL_SECURE === 'true',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD,
-    },
+    host,
+    port,
+    secure,
+    auth: { user, pass },
   });
 };
 
