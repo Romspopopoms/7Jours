@@ -148,7 +148,7 @@ export default function LandingPage7Jours() {
           className="opacity-40 blur-xl"
           priority
         />
-        <div className="absolute inset-0 bg-black bg-opacity-30"></div>
+        <div className="absolute inset-0 bg-opacity-30"></div>
       </div>
 
       {/* Contenu principal */}
