@@ -4,9 +4,20 @@ import { useState, FormEvent, useEffect, useRef } from "react";
 import Image from "next/image";
 import React from "react";
 
+// Interface pour le statut du formulaire
 interface FormStatusType {
   type: 'success' | 'error' | '';
   message: string;
+  details?: string[];
+}
+
+// Interface pour la réponse de l'API
+interface ApiResponse {
+  success: boolean;
+  message: string;
+  errors?: string[];
+  id?: number;
+  emailSent?: boolean;
 }
 
 export default function LandingPage7Jours() {
@@ -18,7 +29,7 @@ export default function LandingPage7Jours() {
   const [showConsentModal, setShowConsentModal] = useState<boolean>(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  // S'assurer que la table existe au chargement de la page
+  // Initialisation de la base de données
   useEffect(() => {
     const initDatabase = async () => {
       try {
@@ -30,18 +41,36 @@ export default function LandingPage7Jours() {
           setDbReady(true);
         } else {
           console.error('Erreur d\'initialisation de la base de données:', data.message);
+          setFormStatus({
+            type: 'error',
+            message: 'Erreur de configuration du système',
+            details: [data.message]
+          });
         }
       } catch (error) {
         console.error('Erreur lors de l\'initialisation de la base de données:', error);
+        setFormStatus({
+          type: 'error',
+          message: 'Impossible de configurer le système',
+          details: [error instanceof Error ? error.message : 'Erreur inconnue']
+        });
       }
     };
 
     initDatabase();
   }, []);
 
+  // Validation email
+  const isValidEmail = (emailToCheck: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(emailToCheck);
+  };
+
+  // Gestion de la soumission du formulaire
   const handleFormSubmit = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
     
+    // Vérifications préalables
     if (!dbReady) {
       setFormStatus({
         type: 'error',
@@ -50,11 +79,22 @@ export default function LandingPage7Jours() {
       return;
     }
     
-    // Validation simple
-    if (!firstName.trim() || !email.trim()) {
+    // Validation des champs
+    const trimmedFirstName = firstName.trim();
+    const trimmedEmail = email.trim();
+
+    if (!trimmedFirstName) {
       setFormStatus({ 
         type: 'error', 
-        message: 'Merci de remplir tous les champs.'
+        message: 'Merci de saisir votre prénom.'
+      });
+      return;
+    }
+
+    if (!trimmedEmail || !isValidEmail(trimmedEmail)) {
+      setFormStatus({ 
+        type: 'error', 
+        message: 'Merci de saisir une adresse email valide.'
       });
       return;
     }
@@ -63,16 +103,17 @@ export default function LandingPage7Jours() {
     setShowConsentModal(true);
   };
 
+  // Téléchargement du PDF
   const downloadPDF = () => {
-    // Créer un lien pour télécharger le PDF
     const link = document.createElement('a');
-    link.href = '/7-jours-de-priere.pdf'; // Chemin vers votre PDF dans le dossier public
+    link.href = '/7-jours-de-priere.pdf';
     link.setAttribute('download', '7-jours-de-priere.pdf');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
+  // Gestion du consentement et de la soumission
   const handleConsentAndSubmit = async (consent: boolean): Promise<void> => {
     setShowConsentModal(false);
     
@@ -87,55 +128,61 @@ export default function LandingPage7Jours() {
     try {
       setIsSubmitting(true);
       
+      // Configuration détaillée de la requête
       const response = await fetch('/api/subscribe', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({ 
-          firstName, 
-          email,
+          firstName: firstName.trim(), 
+          email: email.trim(),
           consentGiven: consent
         })
       });
       
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}`);
-      }
+      // Parsing de la réponse
+      const result: ApiResponse = await response.json();
       
-      const result = await response.json();
-      
-      if (result.success) {
+      // Gestion des différents cas de réponse
+      if (response.ok && result.success) {
+        // Succès de l'inscription
         setFormStatus({ 
           type: 'success', 
-          message: result.message
+          message: result.message || 'Inscription réussie !'
         });
         
-        // Si l'email n'a pas été envoyé, télécharger le PDF directement
+        // Téléchargement du PDF si l'email n'est pas envoyé
         if (!result.emailSent) {
           downloadPDF();
         }
         
-        // Réinitialiser le formulaire
+        // Réinitialisation du formulaire
         setFirstName('');
         setEmail('');
       } else {
+        // Gestion des erreurs de l'API
         setFormStatus({ 
           type: 'error', 
-          message: result.message || 'Une erreur est survenue. Veuillez réessayer.'
+          message: result.message || 'Une erreur est survenue.',
+          details: result.errors
         });
       }
     } catch (error) {
+      // Gestion des erreurs de requête
       console.error('Erreur lors de l\'inscription:', error);
+      
       setFormStatus({ 
         type: 'error', 
-        message: 'Une erreur est survenue. Veuillez réessayer.'
+        message: 'Une erreur de connexion est survenue.',
+        details: [error instanceof Error ? error.message : 'Erreur inconnue']
       });
     } finally {
       setIsSubmitting(false);
     }
   };
-
+  
   return (
     <div className="relative min-h-screen bg-blue-950 text-white flex flex-col items-center justify-center px-4 py-12 overflow-hidden">
       {/* Image de fond floutée */}
