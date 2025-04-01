@@ -1,49 +1,57 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+// Migration script pour créer/mettre à jour la table subscribers
+import { NextApiRequest, NextApiResponse } from 'next';
 import { getDb } from '../../lib/db';
 
-type ResponseData = {
-  success: boolean;
-  message: string;
-  error?: string;
-};
-
 export default async function handler(
-  _req: NextApiRequest,
-  res: NextApiResponse<ResponseData>
+  req: NextApiRequest,
+  res: NextApiResponse
 ) {
   try {
     const sql = getDb();
-    
-    // Créer la table subscribers avec la colonne de consentement
+
+    // Vérifier et créer la table avec les colonnes correctes
     await sql`
       CREATE TABLE IF NOT EXISTS subscribers (
         id SERIAL PRIMARY KEY,
         first_name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        pdf_sent BOOLEAN DEFAULT FALSE,
+        email TEXT NOT NULL UNIQUE,
         consent_given BOOLEAN DEFAULT FALSE,
-        source TEXT DEFAULT 'landing_page'
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
-    
-    // Créer l'index
+
+    // Si la table existe déjà, ajouter la colonne manquante de manière sécurisée
     await sql`
-      CREATE INDEX IF NOT EXISTS idx_subscribers_email ON subscribers(email)
+      DO $$
+      BEGIN
+        -- Tenter d'ajouter la colonne consent_given si elle n'existe pas
+        BEGIN
+          ALTER TABLE subscribers ADD COLUMN consent_given BOOLEAN DEFAULT FALSE;
+        EXCEPTION WHEN duplicate_column THEN
+          -- La colonne existe déjà, ne rien faire
+          RAISE NOTICE 'Column consent_given already exists';
+        END;
+      END $$
     `;
-    
+
+    // Créer un index pour améliorer les performances
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_subscribers_email 
+      ON subscribers(email)
+    `;
+
+    console.log('Migration de la base de données réussie');
+
     return res.status(200).json({ 
       success: true, 
-      message: 'Tables créées avec succès' 
+      message: 'Base de données mise à jour avec succès' 
     });
-  } catch (error: unknown) {
-    console.error('Erreur lors de la migration:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
-    
+  } catch (error) {
+    console.error('Erreur de migration de la base de données:', error);
     return res.status(500).json({ 
       success: false, 
-      message: 'Erreur lors de la migration',
-      error: errorMessage
+      message: 'Échec de la migration de la base de données',
+      error: error instanceof Error ? error.message : 'Erreur inconnue'
     });
   }
 }

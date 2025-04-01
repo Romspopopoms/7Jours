@@ -1,46 +1,26 @@
-// Point d'entrée de l'API d'inscription avec typage strict
-
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getDb } from '../../lib/db';
 
-// Définition du type pour le corps de la requête
+// Interface pour le corps de la requête
 interface SubscriptionRequestBody {
   firstName: string;
   email: string;
   consentGiven: boolean;
 }
 
-// Fonction de validation avec typage strict
-const validateSubscriptionRequest = (body: SubscriptionRequestBody) => {
-  const errors: string[] = [];
-
-  // Validation du prénom
-  if (!body.firstName || typeof body.firstName !== 'string' || body.firstName.trim() === '') {
-    errors.push('Le prénom est requis et doit être une chaîne de caractères non vide');
-  }
-
-  // Validation de l'email
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!body.email || typeof body.email !== 'string' || !emailRegex.test(body.email)) {
-    errors.push('Une adresse email valide est requise');
-  }
-
-  // Validation du consentement
-  if (body.consentGiven !== true) {
-    errors.push('Un consentement explicite est requis');
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors
-  };
-};
+// Interface pour la réponse
+interface ResponseData {
+  success: boolean;
+  message: string;
+  errors?: string[];
+  id?: number;
+}
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse<ResponseData>
 ) {
-  // Vérification de la méthode HTTP
+  // Vérifier la méthode POST
   if (req.method !== 'POST') {
     return res.status(405).json({ 
       success: false, 
@@ -48,74 +28,78 @@ export default async function handler(
     });
   }
 
-  // Vérification du type de contenu
-  const contentType = req.headers['content-type'];
-  if (!contentType || !contentType.includes('application/json')) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Le type de contenu doit être application/json',
-      details: {
-        typeReçu: contentType
-      }
-    });
-  }
-
   try {
-    // Typage et validation du corps de la requête
-    const body = req.body as SubscriptionRequestBody;
+    // Validation du corps de la requête
+    const { firstName, email, consentGiven } = req.body as SubscriptionRequestBody;
+    const errors: string[] = [];
 
-    // Validation complète
-    const validationResult = validateSubscriptionRequest(body);
-    
-    if (!validationResult.isValid) {
-      return res.status(400).json({ 
-        success: false, 
+    // Validation du prénom
+    if (!firstName || typeof firstName !== 'string' || firstName.trim() === '') {
+      errors.push('Le prénom est requis et doit être une chaîne non vide');
+    }
+
+    // Validation de l'email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || typeof email !== 'string' || !emailRegex.test(email.trim())) {
+      errors.push('Une adresse email valide est requise');
+    }
+
+    // Validation du consentement
+    const isConsentGiven = consentGiven === true;
+    if (!isConsentGiven) {
+      errors.push('Un consentement explicite est nécessaire');
+    }
+
+    // Retourner les erreurs si présentes
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
         message: 'Échec de la validation',
-        erreurs: validationResult.errors
+        errors
       });
     }
 
-    const { firstName, email, consentGiven } = body;
-    
     // Connexion à la base de données
     const sql = getDb();
     
-    // Vérification des utilisateurs existants
+    // Vérifier si l'email existe déjà
     const existingUsers = await sql`
-      SELECT * FROM subscribers WHERE email = ${email}
+      SELECT * FROM subscribers WHERE email = ${email.trim()}
     `;
     
     if (existingUsers.length > 0) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Cet email est déjà enregistré'
+        message: 'Cet email est déjà inscrit',
+        errors: ['Un abonnement existe déjà avec cette adresse email']
       });
     }
     
-    // Insertion du nouvel abonné
+    // Insérer le nouvel abonné
     const result = await sql`
       INSERT INTO subscribers (first_name, email, consent_given)
-      VALUES (${firstName}, ${email}, ${consentGiven})
+      VALUES (${firstName.trim()}, ${email.trim()}, ${isConsentGiven})
       RETURNING id
     `;
     
+    // Réponse de succès
     return res.status(200).json({ 
       success: true, 
-      message: 'Inscription réussie !',
+      message: 'Inscription réussie ! Votre PDF est en cours de téléchargement.',
       id: result[0].id
     });
   } catch (error: unknown) {
-    // Journalisation détaillée des erreurs
-    console.error('Erreur d\'inscription :', error);
+    // Gestion des erreurs détaillée
+    console.error('Erreur lors de l\'inscription:', error);
     
-    const messageErreur = error instanceof Error 
+    const errorMessage = error instanceof Error 
       ? error.message 
-      : 'Une erreur inconnue est survenue';
+      : 'Erreur inconnue lors de l\'inscription';
     
     return res.status(500).json({ 
       success: false, 
-      message: 'L\'inscription a échoué',
-      detailsErreur: messageErreur
+      message: 'Échec de l\'inscription',
+      errors: [errorMessage]
     });
   }
 }
