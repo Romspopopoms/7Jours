@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getDb } from '../../lib/db';
+import { sendConfirmationEmail } from '../../lib/email';
 
 // Interface pour le corps de la requête
 interface SubscriptionRequestBody {
@@ -14,6 +15,7 @@ interface ResponseData {
   message: string;
   errors?: string[];
   id?: number;
+  emailSent?: boolean;
 }
 
 export default async function handler(
@@ -82,11 +84,20 @@ export default async function handler(
       RETURNING id
     `;
     
+    // Envoyer l'email de confirmation
+    const emailResult = await sendConfirmationEmail(
+      firstName.trim(), 
+      email.trim()
+    );
+    
     // Réponse de succès
     return res.status(200).json({ 
       success: true, 
-      message: 'Inscription réussie ! Votre PDF est en cours de téléchargement.',
-      id: result[0].id
+      message: emailResult.sent 
+        ? 'Inscription réussie ! Un email de confirmation a été envoyé.' 
+        : 'Inscription réussie ! Votre PDF est en cours de téléchargement.',
+      id: result[0].id,
+      emailSent: emailResult.sent
     });
   } catch (error: unknown) {
     // Gestion des erreurs détaillée

@@ -182,7 +182,7 @@ export default function LandingPage7Jours() {
       setIsSubmitting(false);
     }
   };
-  
+
   return (
     <div className="relative min-h-screen bg-blue-950 text-white flex flex-col items-center justify-center px-4 py-12 overflow-hidden">
       {/* Image de fond floutée */}

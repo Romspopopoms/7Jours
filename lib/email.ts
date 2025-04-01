@@ -1,34 +1,68 @@
 import nodemailer from 'nodemailer';
+import { promises as fs } from 'fs';
+import path from 'path';
 
-// Configuration du transporteur d'email
-// Pour la production, utilisez vos propres identifiants SMTP
-// Pour le développement, vous pouvez utiliser les services de test comme Ethereal
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.EMAIL_PORT || '587'),
-  secure: process.env.EMAIL_SECURE === 'true',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-});
+// Configuration sécurisée du transporteur d'email
+const createEmailTransporter = () => {
+  // Vérification des variables d'environnement
+  const requiredVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASSWORD'];
+  const missingVars = requiredVars.filter(varName => !process.env[varName]);
 
-// Interface pour le contenu de l'email
-interface EmailContent {
-  to: string;
-  subject: string;
-  text?: string;
-  html?: string;
+  if (missingVars.length > 0) {
+    throw new Error(`Variables d'environnement manquantes : ${missingVars.join(', ')}`);
+  }
+
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  });
+};
+
+/**
+ * Charge un fichier PDF de manière sécurisée
+ * @param filename Nom du fichier PDF
+ * @returns Buffer du fichier PDF
+ */
+async function loadPDFFile(filename: string): Promise<Buffer> {
+  try {
+    const filePath = path.join(process.cwd(), 'public', filename);
+    return await fs.readFile(filePath);
+  } catch (error) {
+    console.error(`Erreur lors du chargement du fichier PDF ${filename}:`, error);
+    throw new Error(`Impossible de charger le fichier PDF ${filename}`);
+  }
+}
+
+// Interface pour les détails d'erreur
+interface EmailErrorDetails {
+  message: string;
+  name: string;
+  stack?: string;
 }
 
 /**
  * Envoie un email de confirmation après l'inscription
  * @param firstName Prénom du destinataire
  * @param email Adresse email du destinataire
- * @returns Promesse qui se résout lorsque l'email est envoyé
+ * @returns Promesse qui indique si l'email a été envoyé avec succès
  */
-export async function sendConfirmationEmail(firstName: string, email: string): Promise<boolean> {
+export async function sendConfirmationEmail(firstName: string, email: string): Promise<{
+  sent: boolean;
+  error?: string;
+  errorDetails?: EmailErrorDetails;
+}> {
   try {
+    // Créer le transporteur d'email
+    const transporter = createEmailTransporter();
+
+    // Charger le PDF
+    const pdfBuffer = await loadPDFFile('7-jours-de-priere.pdf');
+
     // Contenu HTML de l'email
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -55,41 +89,111 @@ export async function sendConfirmationEmail(firstName: string, email: string): P
       </div>
     `;
 
-    // Configuration de l'email
-    const mailOptions: EmailContent = {
-      to: email,
-      subject: 'Bienvenue au parcours 7 Jours de Prière !',
-      html: htmlContent,
-      text: `Merci pour votre inscription, ${firstName} ! Nous sommes ravis que vous ayez rejoint notre parcours "7 Jours de Prière". Vous trouverez ci-joint votre PDF pour commencer ce voyage spirituel.`,
+    try {
+      // Envoi de l'email
+      const result = await transporter.sendMail({
+        from: `"Chrétien Réfléchi" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Bienvenue au parcours 7 Jours de Prière !',
+        html: htmlContent,
+        text: `Merci pour votre inscription, ${firstName} ! Nous sommes ravis que vous ayez rejoint notre parcours "7 Jours de Prière".`,
+        attachments: [
+          {
+            filename: '7-jours-de-priere.pdf',
+            content: pdfBuffer,
+            contentType: 'application/pdf'
+          }
+        ]
+      });
+
+      console.log(`Email de confirmation envoyé à ${email}. ID du message:`, result.messageId);
+      return { sent: true };
+    } catch (sendError) {
+      // Log détaillé de l'erreur d'envoi
+      const errorDetails: EmailErrorDetails = {
+        message: sendError instanceof Error ? sendError.message : 'Erreur inconnue',
+        name: sendError instanceof Error ? sendError.name : 'UnknownError',
+        stack: sendError instanceof Error ? sendError.stack : undefined
+      };
+
+      console.error(`Erreur lors de l'envoi de l'email à ${email}:`, {
+        errorName: errorDetails.name,
+        errorMessage: errorDetails.message,
+        errorStack: errorDetails.stack,
+        emailDetails: {
+          to: email,
+          from: process.env.EMAIL_USER,
+          subject: 'Bienvenue au parcours 7 Jours de Prière !'
+        }
+      });
+
+      return {
+        sent: false,
+        error: 'Échec de l\'envoi de l\'email',
+        errorDetails
+      };
+    }
+  } catch (error) {
+    // Log des erreurs de préparation (chargement PDF, etc.)
+    const errorDetails: EmailErrorDetails = {
+      message: error instanceof Error ? error.message : 'Erreur inconnue',
+      name: error instanceof Error ? error.name : 'UnknownError',
+      stack: error instanceof Error ? error.stack : undefined
     };
 
-    // Envoi de l'email
-    await transporter.sendMail({
-      from: `"Chrétien Réfléchi" <${process.env.EMAIL_USER}>`,
-      ...mailOptions,
-      attachments: [
-        {
-          filename: '7-jours-de-priere.pdf',
-          path: './public/7-jours-de-priere.pdf', // Chemin vers le PDF dans le dossier public
-        },
-      ],
+    console.error('Erreur lors de la préparation de l\'email:', {
+      errorName: errorDetails.name,
+      errorMessage: errorDetails.message,
+      errorStack: errorDetails.stack
     });
 
-    console.log(`Email de confirmation envoyé à ${email}`);
+    return {
+      sent: false,
+      error: 'Erreur de préparation de l\'email',
+      errorDetails
+    };
+  }
+}
+
+/**
+ * Vérifie la configuration du transporteur email
+ * @returns Promesse indiquant si la configuration est valide
+ */
+export async function verifyEmailConfig(): Promise<boolean> {
+  try {
+    const transporter = createEmailTransporter();
+    await transporter.verify();
     return true;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi de l\'email de confirmation:', error);
+    console.error('Erreur de configuration du transporteur email:', {
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+      errorMessage: error instanceof Error ? error.message : 'Erreur inconnue',
+      errorStack: error instanceof Error ? error.stack : undefined
+    });
     return false;
   }
 }
 
-// Vérifier la configuration du transporteur email
-export async function verifyEmailConfig(): Promise<boolean> {
+/**
+ * API de gestion de la configuration email
+ */
+export async function checkEmailConfiguration() {
   try {
-    await transporter.verify();
-    return true;
+    const isConfigValid = await verifyEmailConfig();
+    return {
+      configured: isConfigValid,
+      host: process.env.EMAIL_HOST,
+      user: process.env.EMAIL_USER ? '✓' : undefined
+    };
   } catch (error) {
-    console.error('Erreur de configuration du transporteur email:', error);
-    return false;
+    console.error('Erreur lors de la vérification de la configuration email:', {
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+      errorMessage: error instanceof Error ? error.message : 'Erreur inconnue',
+      errorStack: error instanceof Error ? error.stack : undefined
+    });
+    return {
+      configured: false,
+      error: error instanceof Error ? error.message : 'Erreur inconnue'
+    };
   }
 }
